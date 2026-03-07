@@ -1,0 +1,13 @@
+# Dependencies and generated
+mission-control/node_modules/
+mission-control/convex/_generated/
+mission-control/scripts/.venv/
+mission-control/scripts/__pycache__/
+
+# Secrets and local env
+mission-control/.env.local
+mission-control/.env*.local
+*.log
+
+# OS
+.DS_Store

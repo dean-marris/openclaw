@@ -1,0 +1,10 @@
+[project]
+name = "scripts"
+version = "0.1.0"
+description = "Mission-control scripts: CSV import/export, reports"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "rich>=13.0",
+    "httpx>=0.27",
+]

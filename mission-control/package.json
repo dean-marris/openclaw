@@ -1,0 +1,16 @@
+{
+  "name": "mission-control",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "convex dev --local",
+    "dev:once": "convex dev --local --once",
+    "deploy": "convex deploy"
+  },
+  "dependencies": {
+    "convex": "^1.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
