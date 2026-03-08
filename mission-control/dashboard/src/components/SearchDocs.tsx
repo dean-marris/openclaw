@@ -1,5 +1,6 @@
 'use client'
 import { useState, useCallback, useRef } from 'react'
+import Image from 'next/image'
 
 type PageHit = {
   page: number
@@ -26,13 +27,8 @@ type SearchResponse = {
 }
 
 const PERSON_EMOJI: Record<string, string> = {
-  dean: '👨',
-  virginia: '👩',
-  ella: '👧',
-  jack: '👦',
-  phoebe: '🧒',
-  joint: '🏠',
-  all: '📁',
+  dean: '👨', virginia: '👩', ella: '👧', jack: '👦',
+  phoebe: '🧒', joint: '🏠', all: '📁',
 }
 
 function highlight(text: string, query: string): React.ReactNode {
@@ -46,38 +42,65 @@ function highlight(text: string, query: string): React.ReactNode {
   )
 }
 
+function PagePreview({ file, page, query }: { file: string; page: number; query: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const src = `/api/page-image?file=${encodeURIComponent(file)}&page=${page}`
+
+  return (
+    <div className="mt-2">
+      {!expanded ? (
+        <button
+          onClick={() => setExpanded(true)}
+          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+        >
+          🖼 View page image
+        </button>
+      ) : (
+        <div className="mt-2 border border-[#2d3748] rounded-lg overflow-hidden bg-white">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-[#161925] border-b border-[#2d3748]">
+            <span className="text-xs text-[#718096]">Page {page} — searching for &quot;{query}&quot;</span>
+            <button
+              onClick={() => setExpanded(false)}
+              className="text-xs text-[#718096] hover:text-slate-300"
+            >
+              ✕ close
+            </button>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt={`Page ${page}`}
+            className="w-full h-auto"
+            loading="lazy"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SearchDocs() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [meta, setMeta] = useState<{ pdfCount: number; query: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [expandedSnippets, setExpandedSnippets] = useState<Record<string, boolean>>({})
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const search = useCallback(async (q: string) => {
-    if (q.length < 2) {
-      setResults([])
-      setMeta(null)
-      setError(null)
-      return
-    }
+    if (q.length < 2) { setResults([]); setMeta(null); setError(null); return }
     setLoading(true)
     setError(null)
     try {
       const res = await fetch(`/api/search-docs?q=${encodeURIComponent(q)}`)
       if (!res.ok) {
-        const text = await res.text()
-        setError(`Server error ${res.status}: ${text.slice(0, 200)}`)
+        setError(`Server error ${res.status}: ${(await res.text()).slice(0, 200)}`)
         return
       }
       const data: SearchResponse = await res.json()
       if (data.error) setError(data.error)
-      else {
-        setResults(data.results)
-        setMeta({ pdfCount: data.pdfCount, query: data.query })
-        setExpanded({})
-      }
+      else { setResults(data.results); setMeta({ pdfCount: data.pdfCount, query: data.query }); setExpandedSnippets({}) }
     } catch (e) {
       setError(`Search failed: ${String(e)}`)
     } finally {
@@ -93,22 +116,19 @@ export function SearchDocs() {
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      search(query)
-    }
+    if (e.key === 'Enter') { if (debounceRef.current) clearTimeout(debounceRef.current); search(query) }
   }
 
-  const togglePage = (key: string) =>
-    setExpanded(prev => ({ ...prev, [key]: !prev[key] }))
+  const toggleSnippets = (key: string) =>
+    setExpandedSnippets(prev => ({ ...prev, [key]: !prev[key] }))
 
-  const totalHitsAcrossAll = results.reduce((s, r) => s + r.totalMatches, 0)
+  const totalHits = results.reduce((s, r) => s + r.totalMatches, 0)
 
   return (
     <div className="p-4 md:p-8 max-w-3xl">
       <h2 className="text-xl font-bold text-white mb-1">🔍 Search Tax Returns</h2>
       <p className="text-sm text-[#718096] mb-5">
-        Full-text search across all uploaded tax PDFs. Each match shown with context.
+        Full-text search — matches shown with page image + context snippets.
       </p>
 
       {/* Search input */}
@@ -134,12 +154,12 @@ export function SearchDocs() {
         )}
       </div>
 
-      {/* Status bar */}
+      {/* Status */}
       {meta && !loading && (
         <p className="text-xs text-[#718096] mb-4">
           {results.length === 0
             ? `No matches in ${meta.pdfCount} PDF${meta.pdfCount !== 1 ? 's' : ''}`
-            : `${totalHitsAcrossAll} match${totalHitsAcrossAll !== 1 ? 'es' : ''} across ${results.length} file${results.length !== 1 ? 's' : ''} · searched ${meta.pdfCount} PDFs`
+            : `${totalHits} match${totalHits !== 1 ? 'es' : ''} across ${results.length} file${results.length !== 1 ? 's' : ''} · searched ${meta.pdfCount} PDFs`
           }
         </p>
       )}
@@ -179,13 +199,13 @@ export function SearchDocs() {
               <div className="divide-y divide-[#2d3748]">
                 {result.hits.map((hit) => {
                   const pageKey = `${result.file}::${hit.page}`
-                  const isExpanded = !!expanded[pageKey]
-                  const visibleSnippets = isExpanded ? hit.snippets : hit.snippets.slice(0, 2)
+                  const snippetsExpanded = !!expandedSnippets[pageKey]
+                  const visibleSnippets = snippetsExpanded ? hit.snippets : hit.snippets.slice(0, 2)
                   const hiddenCount = hit.snippets.length - 2
 
                   return (
-                    <div key={hit.page} className="px-4 py-3">
-                      {/* Page badge */}
+                    <div key={hit.page} className="px-4 py-4">
+                      {/* Page badge row */}
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-xs font-medium text-[#718096] bg-[#0f1117] px-2 py-1 rounded border border-[#2d3748]">
                           Page {hit.page}
@@ -200,8 +220,11 @@ export function SearchDocs() {
                         )}
                       </div>
 
-                      {/* Snippets */}
-                      <div className="space-y-2">
+                      {/* Page image (lazy, expand on click) */}
+                      <PagePreview file={result.file} page={hit.page} query={query} />
+
+                      {/* Text snippets */}
+                      <div className="mt-3 space-y-2">
                         {visibleSnippets.map((snippet, si) => (
                           <div key={si} className="bg-[#0f1117] border border-[#2d3748] rounded-lg px-3 py-2.5">
                             <p className="text-sm text-slate-300 leading-relaxed">
@@ -211,15 +234,15 @@ export function SearchDocs() {
                         ))}
                       </div>
 
-                      {/* Show more / less toggle */}
+                      {/* Show more snippets */}
                       {hit.snippets.length > 2 && (
                         <button
-                          onClick={() => togglePage(pageKey)}
+                          onClick={() => toggleSnippets(pageKey)}
                           className="mt-2 text-xs text-blue-400 hover:text-blue-300 transition-colors"
                         >
-                          {isExpanded
-                            ? '↑ Show less'
-                            : `↓ Show ${hiddenCount} more match${hiddenCount !== 1 ? 'es' : ''} on this page`
+                          {snippetsExpanded
+                            ? '↑ Show fewer snippets'
+                            : `↓ ${hiddenCount} more snippet${hiddenCount !== 1 ? 's' : ''} on this page`
                           }
                         </button>
                       )}
@@ -241,7 +264,7 @@ export function SearchDocs() {
         </div>
       )}
 
-      {/* Hint when empty */}
+      {/* Hint */}
       {!query && (
         <div className="text-center py-12 text-[#4a5568]">
           <div className="text-4xl mb-3">📄</div>
