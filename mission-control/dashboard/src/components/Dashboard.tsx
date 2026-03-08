@@ -3,12 +3,14 @@ import { useState } from 'react'
 import { TaxChecklist } from './TaxChecklist'
 import { UploadDocs } from './UploadDocs'
 import { OfficeView } from './OfficeView'
+import { BankImport } from './BankImport'
 
-type Tab = 'checklist' | 'upload' | 'investments' | 'office'
+type Tab = 'checklist' | 'upload' | 'investments' | 'office' | 'bank'
 
 const NAV = [
   { id: 'checklist',   label: '🧾 Tax Checklist' },
   { id: 'upload',      label: '📎 Upload Docs' },
+  { id: 'bank',        label: '🏦 NZ Bank Import' },
   { id: 'investments', label: '📈 Investments' },
   { id: 'office',      label: '🏢 The Office' },
 ] as const
@@ -67,6 +69,7 @@ export function Dashboard() {
             <p>USA + NZ portfolio tracker — coming soon.</p>
           </div>
         )}
+        {tab === 'bank' && <BankImport />}
         {tab === 'office' && <OfficeView />}
       </main>
     </div>
