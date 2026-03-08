@@ -48,6 +48,30 @@ Scanned tax docs go in:
 Naming convention: `[person]-[type]-2025.pdf`
 e.g. `dean-w2-2025.pdf`, `joint-mortgage-1098-2025.pdf`
 
+## gog (Google Workspace CLI)
+
+- ✅ Authorized: dean@marris.me (gmail, calendar, drive, contacts, docs, sheets)
+- Keyring: **file backend** (macOS Keychain locked/inaccessible)
+- Passphrase: stored in `~/.zshrc` as `GOG_KEYRING_PASSWORD`
+- Always prefix gog commands with `GOG_KEYRING_PASSWORD="marrisopenclaw"` or source `.zshrc` first
+
+## gog Gmail CLI
+
+- ✅ Authenticated as `dean@marris.me`
+- Keyring backend: **file** (never switch to keychain)
+- Password stored in `~/.zshrc` as `GOG_KEYRING_PASSWORD="marrisopenclaw"`
+- Always prefix commands: `GOG_KEYRING_PASSWORD="marrisopenclaw" gog ...`
+- Henry Grant's email (Jan 29, 2026) contained 2023 & 2024 EFiled tax returns — downloaded and logged
+
+## Stored Tax Documents
+
+| File | Location | Convex ID |
+|------|----------|-----------|
+| 2023 Marris Dean & Virginia EFiled tax returns | `mission-control/storage/2023-taxes/` | j9729xqey85ampg5thm80cpvh582hds2 |
+| 2024 Marris Dean & Virginia EFiled tax returns | `mission-control/storage/2024-taxes/` | j97ckmekzqpx94bqq4p62ez0n582h5b1 |
+
+Source: Henry Grant, hgrant@snobile.com, S.Nobile & Company, NY
+
 ## TODO
 
 - [ ] Confirm income sources for each family member (W-2, 1099, etc.)
