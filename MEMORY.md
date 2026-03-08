@@ -33,6 +33,21 @@ Last updated: 2026-03-07
 - Convex: `mission-control/` (local deployment)
 - Documents: `mission-control/storage/`
 
+## Address & Filing
+
+- **Home:** 9401 S Star Hill Circle, Lone Tree, Colorado 80124
+- **State filing:** Colorado
+- **Investment portfolio:** Split between USA and New Zealand
+
+## Document Storage
+
+Scanned tax docs go in:
+`mission-control/storage/2025-taxes/<person>/`
+- dean/, virginia/, ella/, jack/, phoebe/, joint/
+
+Naming convention: `[person]-[type]-2025.pdf`
+e.g. `dean-w2-2025.pdf`, `joint-mortgage-1098-2025.pdf`
+
 ## TODO
 
 - [ ] Confirm income sources for each family member (W-2, 1099, etc.)
