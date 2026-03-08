@@ -3,9 +3,9 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { readFile, readdir, stat } from 'fs/promises'
 import path from 'path'
-import * as pdfParseModule from 'pdf-parse'
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> = (pdfParseModule as any).default ?? pdfParseModule
+// pdf-parse v1 exports a plain function
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> = require('pdf-parse')
 
 const STORAGE_ROOT = path.join(process.cwd(), '..', 'storage')
 
