@@ -17,7 +17,6 @@ const NAV = [
   { id: 'office',      label: '🏢 The Office' },
 ] as const
 
-
 export function Dashboard() {
   const [tab, setTab] = useState<Tab>('checklist')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -32,15 +31,10 @@ export function Dashboard() {
   return (
     <div className="flex h-screen bg-[#0f1117] text-slate-200 overflow-hidden">
 
-      {/* Mobile overlay */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 z-20 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/60 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar */}
       <aside className={`
         fixed md:static inset-y-0 left-0 z-30
         w-56 flex-shrink-0 border-r border-[#2d3748] flex flex-col
@@ -51,13 +45,7 @@ export function Dashboard() {
           <div className="flex items-center gap-2 mb-1">
             <span className="text-2xl">📊</span>
             <span className="font-bold text-white text-lg">EJP</span>
-            {/* Close button on mobile */}
-            <button
-              className="ml-auto md:hidden text-[#718096] hover:text-white p-1"
-              onClick={() => setSidebarOpen(false)}
-            >
-              ✕
-            </button>
+            <button className="ml-auto md:hidden text-[#718096] hover:text-white p-1" onClick={() => setSidebarOpen(false)}>✕</button>
           </div>
           <p className="text-xs text-[#718096]">Mission Control</p>
         </div>
@@ -87,16 +75,9 @@ export function Dashboard() {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
-        {/* Mobile top bar */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-[#2d3748] flex-shrink-0">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-[#718096] hover:text-white p-1 text-xl"
-          >
-            ☰
-          </button>
+          <button onClick={() => setSidebarOpen(true)} className="text-[#718096] hover:text-white p-1 text-xl">☰</button>
           <span className="text-sm font-medium text-slate-300">{currentNav?.label}</span>
           <div className="ml-auto bg-red-500/10 border border-red-500/20 rounded px-2 py-1 text-xs text-red-400 font-bold">
             {days ?? '—'}d left
@@ -104,17 +85,17 @@ export function Dashboard() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {tab === 'checklist' && <TaxChecklist />}
-          {tab === 'upload' && <UploadDocs />}
-          {tab === 'search' && <SearchDocs />}
+          {tab === 'checklist'   && <TaxChecklist />}
+          {tab === 'upload'      && <UploadDocs />}
+          {tab === 'search'      && <SearchDocs />}
+          {tab === 'bank'        && <BankImport />}
+          {tab === 'office'      && <OfficeView />}
           {tab === 'investments' && (
             <div className="p-8 text-[#718096]">
               <h2 className="text-xl font-bold text-white mb-2">📈 Investment Portfolio</h2>
               <p>USA + NZ portfolio tracker — coming soon.</p>
             </div>
           )}
-          {tab === 'bank' && <BankImport />}
-          {tab === 'office' && <OfficeView />}
         </div>
       </main>
     </div>
