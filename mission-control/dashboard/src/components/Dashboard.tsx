@@ -2,13 +2,15 @@
 import { useState } from 'react'
 import { TaxChecklist } from './TaxChecklist'
 import { UploadDocs } from './UploadDocs'
+import { OfficeView } from './OfficeView'
 
-type Tab = 'checklist' | 'upload' | 'investments'
+type Tab = 'checklist' | 'upload' | 'investments' | 'office'
 
 const NAV = [
-  { id: 'checklist', label: '🧾 Tax Checklist', },
-  { id: 'upload',    label: '📎 Upload Docs', },
-  { id: 'investments', label: '📈 Investments', },
+  { id: 'checklist',   label: '🧾 Tax Checklist' },
+  { id: 'upload',      label: '📎 Upload Docs' },
+  { id: 'investments', label: '📈 Investments' },
+  { id: 'office',      label: '🏢 The Office' },
 ] as const
 
 function daysLeft() {
@@ -65,6 +67,7 @@ export function Dashboard() {
             <p>USA + NZ portfolio tracker — coming soon.</p>
           </div>
         )}
+        {tab === 'office' && <OfficeView />}
       </main>
     </div>
   )
