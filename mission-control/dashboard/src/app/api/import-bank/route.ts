@@ -5,58 +5,126 @@ type Transaction = {
   description: string
   amount: number
   balance?: number
-  currency: string
   type: 'credit' | 'debit'
-  isDistribution: boolean
+  uniqueId?: string
+  tranType?: string
+  year: string
+  accountNumber: string
 }
 
-const DISTRIBUTION_KEYWORDS = [
-  'distribution', 'dividend', 'marris', 'shareholder', 'salary',
-  'income', 'trust', 'payment from', 'transfer from',
-]
-
-function detectDistribution(description: string): boolean {
-  const lower = description.toLowerCase()
-  return DISTRIBUTION_KEYWORDS.some(k => lower.includes(k))
+type AccountBlock = {
+  accountNumber: string
+  accountName: string
+  bank: 'ASB'
+  currency: 'NZD'
+  transactions: Transaction[]
+  highestBalance: number
+  highestBalanceDate: string
+  totalCredits: number
+  totalDebits: number
+  transactionCount: number
 }
 
-function parseNZBankCSV(csv: string): Transaction[] {
-  const lines = csv.trim().split('\n').map(l => l.trim()).filter(Boolean)
-  const transactions: Transaction[] = []
+function parseASBCSV(csv: string): AccountBlock[] {
+  const lines = csv.split('\n').map(l => l.trimEnd())
+  const accounts: AccountBlock[] = []
 
-  for (const line of lines) {
-    if (!line || line.toLowerCase().includes('date') || line.toLowerCase().includes('type')) continue
+  let i = 0
+  while (i < lines.length) {
+    const lineLower = lines[i].toLowerCase()
 
-    // Try ANZ format: Date,Amount,Description,Balance
-    // Try BNZ format: Date,Amount,Payee,Memo,Balance  
-    // Try ASB format: Date,Unique Id,Tran Type,Cheque Number,Payee,Memo,Amount
-    // Generic: split by comma, find date + amount
+    if (lineLower.includes('account name')) {
+      // Next line has the actual account name and number
+      i++
+      if (i >= lines.length) break
 
-    const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').trim())
-    if (cols.length < 3) continue
+      const valueLine = lines[i]
+      const valueCols = valueLine.split(',').map(c => c.trim())
+      const accountName = valueCols[0] || 'Unknown'
+      const accountNumber = valueCols[1] || 'Unknown'
 
-    // Find date (first col that looks like a date)
-    const dateCol = cols.find(c => /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/.test(c) || /\d{4}-\d{2}-\d{2}/.test(c))
-    if (!dateCol) continue
+      // Skip until we find the header row (Date ,Unique Id ,...)
+      i++
+      while (i < lines.length) {
+        if (lines[i].toLowerCase().trimStart().startsWith('date')) {
+          i++ // skip header row
+          break
+        }
+        i++
+      }
 
-    // Find amount (first col that looks like a number, possibly negative)
-    const amountStr = cols.find(c => /^-?\d+\.?\d*$/.test(c.replace(',', '')))
-    if (!amountStr) continue
+      // Parse transactions until blank line or next account block
+      const transactions: Transaction[] = []
+      let highestBalance = 0
+      let highestBalanceDate = ''
+      let totalCredits = 0
+      let totalDebits = 0
 
-    const amount = parseFloat(amountStr.replace(',', ''))
-    const description = cols.slice(2).filter(c => c && c !== amountStr && c !== dateCol).join(' ').trim()
+      while (i < lines.length) {
+        const row = lines[i].trim()
+        if (!row) { i++; break }
+        if (row.toLowerCase().includes('account name')) break
 
-    transactions.push({
-      date: dateCol,
-      description,
-      amount: Math.abs(amount),
-      currency: 'NZD',
-      type: amount >= 0 ? 'credit' : 'debit',
-      isDistribution: detectDistribution(description),
-    })
+        const cols = row.split(',').map(c => c.trim())
+        if (cols.length < 7) { i++; continue }
+
+        const date = cols[0]
+        if (!date || !/^\d{4}\/\d{2}\/\d{2}$/.test(date)) { i++; continue }
+
+        const uniqueId = cols[1] || undefined
+        const tranType = cols[2] || undefined
+        const payee = cols[4] || ''
+        const memo = cols[5] || ''
+        const description = (payee + ' ' + memo).trim()
+        const amount = parseFloat(cols[6])
+
+        if (isNaN(amount)) { i++; continue }
+
+        const type: 'credit' | 'debit' = amount >= 0 ? 'credit' : 'debit'
+        const year = date.substring(0, 4)
+
+        if (type === 'credit') {
+          totalCredits += amount
+          if (amount > highestBalance) {
+            highestBalance = amount
+            highestBalanceDate = date
+          }
+        } else {
+          totalDebits += Math.abs(amount)
+        }
+
+        transactions.push({
+          date,
+          description,
+          amount,
+          type,
+          uniqueId,
+          tranType,
+          year,
+          accountNumber,
+        })
+
+        i++
+      }
+
+      accounts.push({
+        accountNumber,
+        accountName,
+        bank: 'ASB',
+        currency: 'NZD',
+        transactions,
+        highestBalance,
+        highestBalanceDate,
+        totalCredits,
+        totalDebits,
+        transactionCount: transactions.length,
+      })
+    } else {
+      i++
+    }
   }
 
-  return transactions
+  return accounts
 }
 
 export async function POST(req: NextRequest) {
@@ -67,22 +135,15 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
 
     const text = await file.text()
-    const transactions = parseNZBankCSV(text)
+    const accounts = parseASBCSV(text)
 
-    const distributions = transactions.filter(t => t.isDistribution && t.type === 'credit')
-    const totalDistributions = distributions.reduce((sum, t) => sum + t.amount, 0)
-    const totalCredits = transactions.filter(t => t.type === 'credit').reduce((sum, t) => sum + t.amount, 0)
+    const totalTransactions = accounts.reduce((sum, a) => sum + a.transactionCount, 0)
 
     return NextResponse.json({
       ok: true,
-      filename: file.name,
-      transactions: transactions.length,
-      distributions: distributions.length,
-      totalDistributions,
-      totalCredits,
-      currency: 'NZD',
-      data: transactions,
-      distributionList: distributions,
+      accounts,
+      totalAccounts: accounts.length,
+      totalTransactions,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

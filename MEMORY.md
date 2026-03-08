@@ -72,10 +72,60 @@ e.g. `dean-w2-2025.pdf`, `joint-mortgage-1098-2025.pdf`
 
 Source: Henry Grant, hgrant@snobile.com, S.Nobile & Company, NY
 
+## Mission Control — URLs (LAN, home network only)
+
+| Service | URL |
+|---------|-----|
+| Mission Control dashboard | http://10.0.0.31:3001 |
+| OpenClaw Control UI | https://10.0.0.31:18791/#token=4a18f3ba05056dcbf1337c8e6c1aa6e0f6e0a13978f886a890188a6ab5ab2b83 |
+| Convex local | http://127.0.0.1:3210 |
+
+All three auto-start on boot via LaunchAgents. Caddy config: `~/.openclaw/Caddyfile`
+
+## Agents
+
+| Agent | Model | Workspace | Role |
+|-------|-------|-----------|------|
+| EJP (main) | claude-sonnet-4-6 | ~/.openclaw/workspace | Finance, tax, daily ops |
+| Jack | gpt-5.3-codex | ~/My Drive/marris_openclaw/jack-workspace | Coding, Mission Control |
+
+Jack's OpenAI API key stored in auth-profiles.json + OPENAI_API_KEY in ~/.zshrc
+
+## Mission Control Features Built (2026-03-07)
+
+- ✅ Tax Checklist (Convex-backed, toggle status)
+- ✅ Upload Docs
+- ✅ NZ Bank Import
+- ✅ The Office (EJP + Jack desks, agent file viewer with SOUL/AGENTS/TOOLS/IDENTITY/SKILLS tabs)
+- ✅ Ask EJP (RAG search over tax docs — ingestion still needed)
+- ✅ Mobile-friendly with hamburger sidebar
+- ⏳ Tax doc attachments on checklist items (Jack building overnight)
+
+## RAG — Tax Document Search
+
+- Backend built: `mission-control/convex/taxDocuments.ts`
+- Ingestion script: `mission-control/scripts/ingest-tax-docs.ts`
+- OPENAI_API_KEY in ~/.zshrc — run ingestion to populate index
+
+## CPA / Tax Professionals
+
+### BBS Tax (firm handling Marris 2025 returns)
+- **Upload portal:** http://upload.bbstax.com
+
+**John Carr** — Owner & Governing Director
+- Email: john@ggocc.com
+- Cell: +1 863-602-1274
+- Address: P.O Box 780637, San Antonio TX 78278
+
+**James Francesco** — Assistant to John Carr
+- Email: james@bbsstax.com
+- Cell: +1 210-861-2492
+
 ## TODO
 
+- [ ] Run PDF ingestion script on 2023 + 2024 tax returns
 - [ ] Confirm income sources for each family member (W-2, 1099, etc.)
-- [ ] Confirm state of filing (Colorado?)
-- [ ] Build mission-control dashboard/UI
+- [ ] Populate SKILLS.md for EJP and Jack (Dean to do 2026-03-08)
 - [ ] Set up Drive ingestion script (scan → storedFiles in Convex)
 - [ ] Populate investments table
+- [ ] Change password exposed in Telegram chat (S!adow2014)

@@ -3,16 +3,18 @@ import { useState, useEffect } from 'react'
 import { TaxChecklist } from './TaxChecklist'
 import { UploadDocs } from './UploadDocs'
 import { OfficeView } from './OfficeView'
-import { BankImport } from './BankImport'
+import { ASBAccounts } from './ASBAccounts'
 import { SearchDocs } from './SearchDocs'
+import { KeyContacts } from './KeyContacts'
 
-type Tab = 'checklist' | 'upload' | 'search' | 'investments' | 'office' | 'bank'
+type Tab = 'checklist' | 'upload' | 'search' | 'investments' | 'office' | 'asb' | 'contacts'
 
 const NAV = [
   { id: 'checklist',   label: '🧾 Tax Checklist' },
   { id: 'upload',      label: '📎 Upload Docs' },
   { id: 'search',      label: '🔍 Search Docs' },
-  { id: 'bank',        label: '🏦 NZ Bank Import' },
+  { id: 'asb',         label: '🏦 ASB Accounts' },
+  { id: 'contacts',    label: '👔 Key Contacts' },
   { id: 'investments', label: '📈 Investments' },
   { id: 'office',      label: '🏢 The Office' },
 ] as const
@@ -88,7 +90,8 @@ export function Dashboard() {
           {tab === 'checklist'   && <TaxChecklist />}
           {tab === 'upload'      && <UploadDocs />}
           {tab === 'search'      && <SearchDocs />}
-          {tab === 'bank'        && <BankImport />}
+          {tab === 'asb'         && <ASBAccounts />}
+          {tab === 'contacts'    && <KeyContacts />}
           {tab === 'office'      && <OfficeView />}
           {tab === 'investments' && (
             <div className="p-8 text-[#718096]">

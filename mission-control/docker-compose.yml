@@ -1,0 +1,69 @@
+version: '3.8'
+
+# Marris Mission Control — Docker Compose
+# Convex backend + Next.js dashboard, both auto-start on reboot
+#
+# Start:   docker compose up -d
+# Stop:    docker compose down
+# Logs:    docker compose logs -f
+# Restart: docker compose restart
+
+services:
+
+  # ─── Convex Local Backend (database + functions) ───────────────────────────
+  convex:
+    image: node:22-bookworm-slim
+    container_name: marris-convex
+    restart: always
+    working_dir: /app
+    volumes:
+      - .:/app
+      - convex_node_modules:/app/node_modules
+      - convex_data:/app/.convex/local
+    ports:
+      - "3210:3210"
+      - "3211:3211"
+    environment:
+      - HOME=/root
+      - NODE_ENV=development
+      - PATH=/app/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
+    command: sh -c "npm install --prefer-offline 2>/dev/null; npx convex dev --local"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3210/api/query',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+
+  # ─── Next.js Dashboard ─────────────────────────────────────────────────────
+  dashboard:
+    image: node:22-bookworm-slim
+    container_name: marris-dashboard
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./dashboard:/app
+      - dashboard_node_modules:/app/node_modules
+      - /Users/deanmarris/.openclaw/media:/openclaw-media:ro
+      - /Users/deanmarris/My Drive/marris_openclaw/mission-control/storage:/app/../storage
+      - /Users/deanmarris/.openclaw/workspace:/ejp-workspace:ro
+      - /Users/deanmarris/My Drive/marris_openclaw/jack-workspace:/jack-workspace:ro
+      - /Users/deanmarris/My Drive/marris_openclaw/agents:/marris-agents:ro
+    ports:
+      - "5174:5174"
+    environment:
+      - HOME=/root
+      - NODE_ENV=development
+      - PATH=/app/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
+    command: sh -c "npm install --prefer-offline 2>/dev/null; npm run dev -- -H 0.0.0.0 -p 5174"
+    depends_on:
+      convex:
+        condition: service_healthy
+
+volumes:
+  convex_data:
+    name: marris-convex-data
+  convex_node_modules:
+    name: marris-convex-modules
+  dashboard_node_modules:
+    name: marris-dashboard-modules
