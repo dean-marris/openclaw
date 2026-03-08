@@ -36,4 +36,18 @@ export default defineSchema({
   })
     .index("by_category", ["category"])
     .index("by_year", ["year"]),
+
+  taxDocumentChunks: defineTable({
+    fileId: v.string(),
+    fileName: v.string(),
+    year: v.string(),
+    person: v.string(),
+    chunkIndex: v.number(),
+    text: v.string(),
+    embedding: v.array(v.float64()),
+    pageNumber: v.optional(v.number()),
+  }).vectorIndex("by_embedding", {
+    vectorField: "embedding",
+    dimensions: 1536,
+  }),
 });

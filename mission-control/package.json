@@ -5,12 +5,16 @@
   "scripts": {
     "dev": "convex dev --local",
     "dev:once": "convex dev --local --once",
-    "deploy": "convex deploy"
+    "deploy": "convex deploy",
+    "ingest": "npx tsx scripts/ingest-tax-docs.ts"
   },
   "dependencies": {
-    "convex": "^1.21.0"
+    "@types/pdf-parse": "^1.1.5",
+    "convex": "^1.21.0",
+    "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "typescript": "^5.0.0"
   }
 }

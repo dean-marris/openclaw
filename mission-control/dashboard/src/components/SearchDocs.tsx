@@ -56,6 +56,11 @@ export function SearchDocs() {
     setError(null)
     try {
       const res = await fetch(`/api/search-docs?q=${encodeURIComponent(q)}`)
+      if (!res.ok) {
+        const text = await res.text()
+        setError(`Server error ${res.status}: ${text.slice(0, 200)}`)
+        return
+      }
       const data: SearchResponse = await res.json()
       if (data.error) setError(data.error)
       else {
@@ -63,7 +68,7 @@ export function SearchDocs() {
         setMeta({ pdfCount: data.pdfCount, query: data.query })
       }
     } catch (e) {
-      setError(String(e))
+      setError(`Search failed: ${String(e)}`)
     } finally {
       setLoading(false)
     }
