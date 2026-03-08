@@ -59,8 +59,7 @@ function getSnippet(text: string, query: string, snippetLen = 220): string {
 }
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const query = (searchParams.get('q') || '').trim()
+  const query = (req.nextUrl.searchParams.get('q') || '').trim()
 
   if (!query || query.length < 2) {
     return NextResponse.json({ results: [], error: 'Query too short' })
