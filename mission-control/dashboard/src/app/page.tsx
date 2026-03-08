@@ -1,5 +1,5 @@
-import { TaxDashboard } from '@/components/TaxDashboard'
+import { Dashboard } from '@/components/Dashboard'
 
 export default function Home() {
-  return <TaxDashboard />
+  return <Dashboard />
 }

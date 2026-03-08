@@ -1,7 +1,7 @@
 'use client'
 import { useQuery, useMutation } from 'convex/react'
-import { api } from '../../convex/_generated/api'
-import { Id } from '../../convex/_generated/dataModel'
+import { api } from '../../../convex/_generated/api'
+import { Id } from '../../../convex/_generated/dataModel'
 
 const FAMILY = ['Dean', 'Virginia', 'Ella', 'Jack', 'Phoebe', 'Joint'] as const
 const COLORS: Record<string, string> = {
@@ -103,7 +103,7 @@ function PersonCard({ person, items, onToggle }: { person: string; items: Item[]
   )
 }
 
-export function TaxDashboard() {
+export function TaxChecklist() {
   const items = useQuery(api.taxChecklist.listByYear, { year: '2025' })
   const updateItem = useMutation(api.taxChecklist.update)
 
