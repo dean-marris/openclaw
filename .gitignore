@@ -1,3 +1,6 @@
+# OpenClaw internal state
+.openclaw/
+
 # Mission-control: dependencies and generated
 mission-control/node_modules/
 mission-control/convex/_generated/
