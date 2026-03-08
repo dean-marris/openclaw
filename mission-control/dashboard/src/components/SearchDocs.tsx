@@ -1,13 +1,18 @@
 'use client'
 import { useState, useCallback, useRef } from 'react'
 
+type PageHit = {
+  page: number
+  matchCount: number
+  snippets: string[]
+}
+
 type SearchResult = {
   file: string
   year: string
   person: string
-  page: number
-  snippet: string
-  matchCount: number
+  hits: PageHit[]
+  totalMatches: number
 }
 
 type SearchResponse = {
@@ -29,17 +34,13 @@ const PERSON_EMOJI: Record<string, string> = {
 
 function highlight(text: string, query: string): React.ReactNode {
   if (!query) return text
-  try {
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
-    return parts.map((part, i) =>
-      part.toLowerCase() === query.toLowerCase()
-        ? <mark key={i} className="bg-yellow-400/30 text-yellow-200 rounded px-0.5">{part}</mark>
-        : part
-    )
-  } catch {
-    return text
-  }
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase()
+      ? <mark key={i} className="bg-yellow-400/40 text-yellow-100 rounded px-0.5 font-semibold">{part}</mark>
+      : part
+  )
 }
 
 export function SearchDocs() {
@@ -48,6 +49,7 @@ export function SearchDocs() {
   const [loading, setLoading] = useState(false)
   const [meta, setMeta] = useState<{ pdfCount: number; query: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const search = useCallback(async (q: string) => {
@@ -71,6 +73,7 @@ export function SearchDocs() {
       else {
         setResults(data.results)
         setMeta({ pdfCount: data.pdfCount, query: data.query })
+        setExpanded({})
       }
     } catch (e) {
       setError(`Search failed: ${String(e)}`)
@@ -93,31 +96,28 @@ export function SearchDocs() {
     }
   }
 
-  // Group results by file
-  const grouped = results.reduce<Record<string, SearchResult[]>>((acc, r) => {
-    if (!acc[r.file]) acc[r.file] = []
-    acc[r.file].push(r)
-    return acc
-  }, {})
+  const togglePage = (key: string) =>
+    setExpanded(prev => ({ ...prev, [key]: !prev[key] }))
+
+  const totalHitsAcrossAll = results.reduce((s, r) => s + r.totalMatches, 0)
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 md:p-8 max-w-3xl">
       <h2 className="text-xl font-bold text-white mb-1">🔍 Search Tax Returns</h2>
-      <p className="text-sm text-[#718096] mb-6">
-        Search across all uploaded tax PDFs — 2023, 2024, and 2025. 
-        Finds matches by page with context snippets.
+      <p className="text-sm text-[#718096] mb-5">
+        Full-text search across all uploaded tax PDFs. Each match shown with context.
       </p>
 
       {/* Search input */}
-      <div className="relative mb-6">
+      <div className="relative mb-5">
         <input
           type="text"
           value={query}
           onChange={onChange}
           onKeyDown={onKeyDown}
-          placeholder={'Search\u2026 e.g. \u201cW-2\u201d, \u201ccapital gains\u201d, \u201cmortgage\u201d, \u201cEROAD\u201d'}
-          className="w-full bg-[#1e2230] border border-[#2d3748] rounded-xl px-4 py-3 pl-11 
-                     text-slate-200 placeholder:text-[#4a5568] focus:outline-none 
+          placeholder="e.g. W-2, capital gains, mortgage, EROAD, dividend"
+          className="w-full bg-[#1e2230] border border-[#2d3748] rounded-xl px-4 py-3 pl-11
+                     text-slate-200 placeholder:text-[#4a5568] focus:outline-none
                      focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 text-sm"
         />
         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4a5568]">
@@ -126,7 +126,7 @@ export function SearchDocs() {
         {query && (
           <button
             onClick={() => { setQuery(''); setResults([]); setMeta(null) }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#4a5568] hover:text-slate-300 text-lg"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#4a5568] hover:text-slate-300 text-lg px-1"
           >✕</button>
         )}
       </div>
@@ -136,7 +136,7 @@ export function SearchDocs() {
         <p className="text-xs text-[#718096] mb-4">
           {results.length === 0
             ? `No matches in ${meta.pdfCount} PDF${meta.pdfCount !== 1 ? 's' : ''}`
-            : `${results.length} match${results.length !== 1 ? 'es' : ''} across ${Object.keys(grouped).length} file${Object.keys(grouped).length !== 1 ? 's' : ''} · searched ${meta.pdfCount} PDFs`
+            : `${totalHitsAcrossAll} match${totalHitsAcrossAll !== 1 ? 'es' : ''} across ${results.length} file${results.length !== 1 ? 's' : ''} · searched ${meta.pdfCount} PDFs`
           }
         </p>
       )}
@@ -147,60 +147,85 @@ export function SearchDocs() {
         </div>
       )}
 
-      {/* Results grouped by file */}
-      {Object.keys(grouped).length > 0 && (
-        <div className="space-y-4">
-          {Object.entries(grouped).map(([file, hits]) => {
-            const first = hits[0]
-            const emoji = PERSON_EMOJI[first.person] ?? '📄'
-            const fileName = file.split('/').pop() ?? file
-            const totalHits = hits.reduce((s, h) => s + h.matchCount, 0)
+      {/* Results */}
+      <div className="space-y-5">
+        {results.map((result) => {
+          const emoji = PERSON_EMOJI[result.person] ?? '📄'
+          const fileName = result.file.split('/').pop() ?? result.file
 
-            return (
-              <div key={file} className="bg-[#1e2230] border border-[#2d3748] rounded-xl overflow-hidden">
-                {/* File header */}
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2d3748] bg-[#161925]">
-                  <span className="text-lg">{emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-200 truncate">{fileName}</p>
-                    <p className="text-xs text-[#718096]">
-                      {first.year} · {first.person} · {totalHits} match{totalHits !== 1 ? 'es' : ''} on {hits.length} page{hits.length !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  <span className="bg-blue-600/20 text-blue-400 text-xs px-2 py-1 rounded-full font-medium">
-                    {first.year}
-                  </span>
+          return (
+            <div key={result.file} className="bg-[#1e2230] border border-[#2d3748] rounded-xl overflow-hidden">
+              {/* File header */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2d3748] bg-[#161925]">
+                <span className="text-lg">{emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-200 truncate">{fileName}</p>
+                  <p className="text-xs text-[#718096]">
+                    {result.year} · {result.totalMatches} match{result.totalMatches !== 1 ? 'es' : ''} on {result.hits.length} page{result.hits.length !== 1 ? 's' : ''}
+                  </p>
                 </div>
+                <span className="bg-blue-600/20 text-blue-400 text-xs px-2 py-1 rounded-full font-medium flex-shrink-0">
+                  {result.year}
+                </span>
+              </div>
 
-                {/* Page hits */}
-                <div className="divide-y divide-[#2d3748]">
-                  {hits.map((hit, i) => (
-                    <div key={i} className="px-4 py-3">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs font-medium text-[#718096] bg-[#0f1117] px-2 py-0.5 rounded">
+              {/* Page hits */}
+              <div className="divide-y divide-[#2d3748]">
+                {result.hits.map((hit) => {
+                  const pageKey = `${result.file}::${hit.page}`
+                  const isExpanded = !!expanded[pageKey]
+                  const visibleSnippets = isExpanded ? hit.snippets : hit.snippets.slice(0, 2)
+                  const hiddenCount = hit.snippets.length - 2
+
+                  return (
+                    <div key={hit.page} className="px-4 py-3">
+                      {/* Page badge */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-medium text-[#718096] bg-[#0f1117] px-2 py-1 rounded border border-[#2d3748]">
                           Page {hit.page}
                         </span>
-                        {hit.matchCount > 1 && (
-                          <span className="text-xs text-[#4a5568]">{hit.matchCount}× found</span>
-                        )}
+                        <span className="text-xs text-blue-400 font-medium">
+                          {hit.matchCount} match{hit.matchCount !== 1 ? 'es' : ''}
+                        </span>
                       </div>
-                      <p className="text-sm text-slate-300 leading-relaxed font-mono">
-                        {highlight(hit.snippet, query)}
-                      </p>
+
+                      {/* Snippets */}
+                      <div className="space-y-2">
+                        {visibleSnippets.map((snippet, si) => (
+                          <div key={si} className="bg-[#0f1117] border border-[#2d3748] rounded-lg px-3 py-2.5">
+                            <p className="text-sm text-slate-300 leading-relaxed">
+                              {highlight(snippet, query)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Show more / less toggle */}
+                      {hit.snippets.length > 2 && (
+                        <button
+                          onClick={() => togglePage(pageKey)}
+                          className="mt-2 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                          {isExpanded
+                            ? '↑ Show less'
+                            : `↓ Show ${hiddenCount} more match${hiddenCount !== 1 ? 'es' : ''} on this page`
+                          }
+                        </button>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
-      )}
+            </div>
+          )
+        })}
+      </div>
 
       {/* Empty state */}
       {!loading && query.length >= 2 && results.length === 0 && meta && (
         <div className="text-center py-12 text-[#4a5568]">
           <div className="text-4xl mb-3">🔎</div>
-          <p className="text-sm">No matches for <span className="text-slate-400">"{query}"</span></p>
+          <p className="text-sm">No matches for <span className="text-slate-400">&quot;{query}&quot;</span></p>
           <p className="text-xs mt-1">Try a different term or check if the PDF has been uploaded</p>
         </div>
       )}

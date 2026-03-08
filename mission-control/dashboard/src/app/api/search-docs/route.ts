@@ -1,7 +1,7 @@
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { readFile, readdir, stat } from 'fs/promises'
+import { readFile, readdir } from 'fs/promises'
 import path from 'path'
 // pdf-parse v1 exports a plain function
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -9,13 +9,18 @@ const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> = r
 
 const STORAGE_ROOT = path.join(process.cwd(), '..', 'storage')
 
+export interface PageHit {
+  page: number
+  matchCount: number
+  snippets: string[]   // one snippet per occurrence (up to 8 per page)
+}
+
 export interface SearchResult {
-  file: string          // relative path from storage root
+  file: string
   year: string
   person: string
-  page: number
-  snippet: string       // ~200 chars around the match
-  matchCount: number
+  hits: PageHit[]
+  totalMatches: number
 }
 
 async function findPDFs(dir: string): Promise<string[]> {
@@ -39,7 +44,6 @@ async function findPDFs(dir: string): Promise<string[]> {
 function extractMeta(filePath: string): { year: string; person: string } {
   const rel = path.relative(STORAGE_ROOT, filePath)
   const parts = rel.split(path.sep)
-  // e.g. 2025-taxes/dean/file.pdf  OR  2023-taxes/file.pdf
   const yearDir = parts[0] || ''
   const yearMatch = yearDir.match(/(\d{4})/)
   const year = yearMatch ? yearMatch[1] : '?'
@@ -47,15 +51,29 @@ function extractMeta(filePath: string): { year: string; person: string } {
   return { year, person }
 }
 
-function getSnippet(text: string, query: string, snippetLen = 220): string {
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
-  if (idx === -1) return ''
-  const start = Math.max(0, idx - 80)
-  const end = Math.min(text.length, idx + query.length + 140)
-  let snippet = text.slice(start, end).replace(/\s+/g, ' ').trim()
-  if (start > 0) snippet = '…' + snippet
-  if (end < text.length) snippet = snippet + '…'
-  return snippet
+// Extract up to maxHits individual context snippets from pageText for a given query
+function getSnippets(pageText: string, query: string, maxHits = 8, contextChars = 180): string[] {
+  const clean = pageText.replace(/\s+/g, ' ')
+  const lower = clean.toLowerCase()
+  const qLower = query.toLowerCase()
+  const snippets: string[] = []
+  let pos = 0
+
+  while (snippets.length < maxHits) {
+    const idx = lower.indexOf(qLower, pos)
+    if (idx === -1) break
+
+    const start = Math.max(0, idx - contextChars)
+    const end = Math.min(clean.length, idx + qLower.length + contextChars)
+    let snippet = clean.slice(start, end).trim()
+    if (start > 0) snippet = '…' + snippet
+    if (end < clean.length) snippet = snippet + '…'
+    snippets.push(snippet)
+
+    pos = idx + qLower.length
+  }
+
+  return snippets
 }
 
 export async function GET(req: NextRequest) {
@@ -75,40 +93,37 @@ export async function GET(req: NextRequest) {
       const { year, person } = extractMeta(pdfPath)
       const relPath = path.relative(STORAGE_ROOT, pdfPath)
 
-      // Search page by page
-      // pdf-parse gives us full text; split by form-feed for pages
       const pages = data.text.split(/\f/)
-      let totalMatches = 0
+      const hits: PageHit[] = []
 
       pages.forEach((pageText: string, pageIndex: number) => {
         const lower = pageText.toLowerCase()
         const qLower = query.toLowerCase()
         let pos = 0
-        let pageMatches = 0
+        let matchCount = 0
         while ((pos = lower.indexOf(qLower, pos)) !== -1) {
-          pageMatches++
+          matchCount++
           pos += qLower.length
         }
-        if (pageMatches > 0) {
-          totalMatches += pageMatches
-          results.push({
-            file: relPath,
-            year,
-            person,
+        if (matchCount > 0) {
+          hits.push({
             page: pageIndex + 1,
-            snippet: getSnippet(pageText, query),
-            matchCount: pageMatches,
+            matchCount,
+            snippets: getSnippets(pageText, query),
           })
         }
       })
+
+      if (hits.length > 0) {
+        const totalMatches = hits.reduce((s, h) => s + h.matchCount, 0)
+        results.push({ file: relPath, year, person, hits, totalMatches })
+      }
     } catch (e) {
-      // skip unreadable PDFs
       console.error(`Failed to parse ${pdfPath}:`, e)
     }
   }
 
-  // Sort: more matches first
-  results.sort((a, b) => b.matchCount - a.matchCount)
+  results.sort((a, b) => b.totalMatches - a.totalMatches)
 
   return NextResponse.json({ results, query, pdfCount: pdfs.length })
 }
