@@ -3,9 +3,15 @@
 
 # Mission-control: dependencies and generated
 mission-control/node_modules/
+mission-control/dashboard/node_modules/
 mission-control/convex/_generated/
 mission-control/scripts/.venv/
 mission-control/scripts/__pycache__/
+
+# Catch-all: never sync deps/envs to Drive or Git
+**/node_modules/
+**/.venv/
+**/__pycache__/
 mission-control/.env.local
 mission-control/.env*.local
 
