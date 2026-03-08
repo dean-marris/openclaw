@@ -1,5 +1,5 @@
 # HEARTBEAT.md
 
-# Keep this file empty (or with only comments) to skip heartbeat API calls.
+## 🔇 SILENT MODE — Do not send any messages until morning (after 08:00 MST)
 
-# Add tasks below when you want the agent to check something periodically.
+Work in the background is fine. No pings, no updates, no reactions.

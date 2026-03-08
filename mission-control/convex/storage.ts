@@ -34,6 +34,7 @@ export const add = mutation({
       v.literal("other")
     ),
     year: v.optional(v.string()),
+    person: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("storedFiles", {
