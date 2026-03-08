@@ -5,6 +5,7 @@ type PageHit = {
   page: number
   matchCount: number
   snippets: string[]
+  ocr: boolean
 }
 
 type SearchResult = {
@@ -14,7 +15,7 @@ type SearchResult = {
   hits: PageHit[]
   totalMatches: number
   totalPages: number
-  imageOnlyPages: number
+  ocrPages: number
 }
 
 type SearchResponse = {
@@ -164,8 +165,8 @@ export function SearchDocs() {
                   <p className="text-sm font-medium text-slate-200 truncate">{fileName}</p>
                   <p className="text-xs text-[#718096]">
                     {result.year} · {result.totalMatches} match{result.totalMatches !== 1 ? 'es' : ''} on {result.hits.length} page{result.hits.length !== 1 ? 's' : ''}
-                    {result.imageOnlyPages > 0 && (
-                      <span className="ml-2 text-amber-400">· ⚠️ {result.imageOnlyPages} scanned page{result.imageOnlyPages !== 1 ? 's' : ''} not searchable</span>
+                    {result.ocrPages > 0 && (
+                      <span className="ml-2 text-violet-400">· 🔬 {result.ocrPages} page{result.ocrPages !== 1 ? 's' : ''} OCR&apos;d</span>
                     )}
                   </p>
                 </div>
@@ -192,6 +193,11 @@ export function SearchDocs() {
                         <span className="text-xs text-blue-400 font-medium">
                           {hit.matchCount} match{hit.matchCount !== 1 ? 'es' : ''}
                         </span>
+                        {hit.ocr && (
+                          <span className="text-xs text-violet-400 bg-violet-400/10 border border-violet-400/20 px-2 py-0.5 rounded-full">
+                            🔬 OCR
+                          </span>
+                        )}
                       </div>
 
                       {/* Snippets */}

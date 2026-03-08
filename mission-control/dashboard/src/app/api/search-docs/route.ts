@@ -1,18 +1,24 @@
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { readFile, readdir } from 'fs/promises'
+import { readFile, readdir, mkdtemp, rm } from 'fs/promises'
+import { exec as execCb } from 'child_process'
+import { promisify } from 'util'
+import { tmpdir } from 'os'
 import path from 'path'
 
-// pdfjs-dist is ESM — loaded via dynamic import inside the handler
+const exec = promisify(execCb)
+
+// pdfjs-dist is ESM — loaded via dynamic import inside extractPages()
 
 const STORAGE_ROOT = path.join(process.cwd(), '..', 'storage')
+const MAX_OCR_PAGES = 20   // safety cap per PDF to avoid timeout
 
 export interface PageHit {
   page: number
   matchCount: number
   snippets: string[]
-  imageOnly: boolean   // true if no text could be extracted from this page
+  ocr: boolean   // true = text came from OCR (was image-only)
 }
 
 export interface SearchResult {
@@ -22,7 +28,7 @@ export interface SearchResult {
   hits: PageHit[]
   totalMatches: number
   totalPages: number
-  imageOnlyPages: number  // pages we couldn't search (scanned images)
+  ocrPages: number   // how many pages needed OCR
 }
 
 async function findPDFs(dir: string): Promise<string[]> {
@@ -37,20 +43,18 @@ async function findPDFs(dir: string): Promise<string[]> {
         files.push(full)
       }
     }
-  } catch {
-    // skip unreadable dirs
-  }
+  } catch { /* skip unreadable dirs */ }
   return files
 }
 
 function extractMeta(filePath: string): { year: string; person: string } {
   const rel = path.relative(STORAGE_ROOT, filePath)
   const parts = rel.split(path.sep)
-  const yearDir = parts[0] || ''
-  const yearMatch = yearDir.match(/(\d{4})/)
-  const year = yearMatch ? yearMatch[1] : '?'
-  const person = parts.length >= 3 ? parts[1] : 'all'
-  return { year, person }
+  const yearMatch = (parts[0] || '').match(/(\d{4})/)
+  return {
+    year: yearMatch ? yearMatch[1] : '?',
+    person: parts.length >= 3 ? parts[1] : 'all',
+  }
 }
 
 function getSnippets(pageText: string, query: string, maxHits = 8, contextChars = 200): string[] {
@@ -63,23 +67,41 @@ function getSnippets(pageText: string, query: string, maxHits = 8, contextChars 
   while (snippets.length < maxHits) {
     const idx = lower.indexOf(qLower, pos)
     if (idx === -1) break
-
     const start = Math.max(0, idx - contextChars)
     const end = Math.min(clean.length, idx + qLower.length + contextChars)
     let snippet = clean.slice(start, end).trim()
     if (start > 0) snippet = '…' + snippet
     if (end < clean.length) snippet = snippet + '…'
     snippets.push(snippet)
-
     pos = idx + qLower.length
   }
-
   return snippets
 }
 
-// Extract text from each page using pdfjs-dist (accurate per-page)
-async function extractPages(buffer: Buffer): Promise<{ pageNum: number; text: string }[]> {
-  // Dynamic import required — pdfjs-dist is ESM-only
+// OCR a single page of a PDF using gs (render) + tesseract (read)
+async function ocrPage(pdfPath: string, pageNum: number, tmpDir: string): Promise<string> {
+  const outPng = path.join(tmpDir, `page-${pageNum}.png`)
+  const escapedPdf = pdfPath.replace(/'/g, "'\\''")
+  const escapedPng = outPng.replace(/'/g, "'\\''")
+
+  // Render at 300 DPI for good OCR accuracy
+  await exec(
+    `gs -dNOPAUSE -dBATCH -sDEVICE=png16m -r300 -dFirstPage=${pageNum} -dLastPage=${pageNum} -sOutputFile='${escapedPng}' '${escapedPdf}' 2>/dev/null`
+  )
+
+  const { stdout } = await exec(
+    `tesseract '${escapedPng}' stdout --psm 6 -l eng 2>/dev/null`
+  )
+
+  return stdout
+}
+
+// Extract text from each page via pdfjs-dist, with OCR fallback for image-only pages
+async function extractPages(
+  buffer: Buffer,
+  pdfPath: string,
+): Promise<{ pageNum: number; text: string; ocr: boolean }[]> {
+  // Dynamic import — pdfjs-dist is ESM-only
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfjsLib: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const data = new Uint8Array(buffer)
@@ -92,17 +114,45 @@ async function extractPages(buffer: Buffer): Promise<{ pageNum: number; text: st
     verbosity: 0,
   }).promise
 
-  const pages: { pageNum: number; text: string }[] = []
-
+  // First pass: collect native text per page, flag image-only pages
+  const rawPages: { pageNum: number; text: string; imageOnly: boolean }[] = []
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i)
     const content = await page.getTextContent()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const text = content.items.map((item: any) => item.str ?? '').join(' ')
-    pages.push({ pageNum: i, text })
+    const charCount = text.replace(/\s+/g, '').length
+    rawPages.push({ pageNum: i, text, imageOnly: charCount < 15 })
   }
 
-  return pages
+  const imageOnlyNums = rawPages.filter(p => p.imageOnly).map(p => p.pageNum)
+
+  // Second pass: OCR image-only pages (up to cap)
+  let tmpDir: string | null = null
+  const ocrResults: Record<number, string> = {}
+
+  const pagesToOcr = imageOnlyNums.slice(0, MAX_OCR_PAGES)
+  if (pagesToOcr.length > 0) {
+    tmpDir = await mkdtemp(path.join(tmpdir(), 'ejp-ocr-'))
+    try {
+      for (const pageNum of pagesToOcr) {
+        try {
+          ocrResults[pageNum] = await ocrPage(pdfPath, pageNum, tmpDir)
+        } catch (e) {
+          console.error(`OCR failed for page ${pageNum}:`, e)
+          ocrResults[pageNum] = ''
+        }
+      }
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true })
+    }
+  }
+
+  return rawPages.map(p => ({
+    pageNum: p.pageNum,
+    text: p.imageOnly ? (ocrResults[p.pageNum] ?? '') : p.text,
+    ocr: p.imageOnly,
+  }))
 }
 
 export async function GET(req: NextRequest) {
@@ -120,19 +170,13 @@ export async function GET(req: NextRequest) {
       const buffer = await readFile(pdfPath)
       const { year, person } = extractMeta(pdfPath)
       const relPath = path.relative(STORAGE_ROOT, pdfPath)
+      const pages = await extractPages(buffer, pdfPath)
 
-      const pages = await extractPages(buffer)
       const hits: PageHit[] = []
-      let imageOnlyPages = 0
+      let ocrPages = 0
 
-      for (const { pageNum, text } of pages) {
-        const charCount = text.replace(/\s+/g, '').length
-        const isImageOnly = charCount < 15
-
-        if (isImageOnly) {
-          imageOnlyPages++
-          continue
-        }
+      for (const { pageNum, text, ocr } of pages) {
+        if (ocr) ocrPages++
 
         const lower = text.toLowerCase()
         const qLower = query.toLowerCase()
@@ -148,31 +192,27 @@ export async function GET(req: NextRequest) {
             page: pageNum,
             matchCount,
             snippets: getSnippets(text, query),
-            imageOnly: false,
+            ocr,
           })
         }
       }
 
-      if (hits.length > 0 || imageOnlyPages > 0) {
-        const totalMatches = hits.reduce((s, h) => s + h.matchCount, 0)
-        if (totalMatches > 0) {
-          results.push({
-            file: relPath,
-            year,
-            person,
-            hits,
-            totalMatches,
-            totalPages: pages.length,
-            imageOnlyPages,
-          })
-        }
+      if (hits.length > 0) {
+        results.push({
+          file: relPath,
+          year,
+          person,
+          hits,
+          totalMatches: hits.reduce((s, h) => s + h.matchCount, 0),
+          totalPages: pages.length,
+          ocrPages,
+        })
       }
     } catch (e) {
-      console.error(`Failed to parse ${pdfPath}:`, e)
+      console.error(`Failed to process ${pdfPath}:`, e)
     }
   }
 
   results.sort((a, b) => b.totalMatches - a.totalMatches)
-
   return NextResponse.json({ results, query, pdfCount: pdfs.length })
 }
