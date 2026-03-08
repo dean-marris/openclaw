@@ -3,16 +3,16 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { readFile, readdir } from 'fs/promises'
 import path from 'path'
-// pdf-parse v1 exports a plain function
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> = require('pdf-parse')
+
+// pdfjs-dist is ESM — loaded via dynamic import inside the handler
 
 const STORAGE_ROOT = path.join(process.cwd(), '..', 'storage')
 
 export interface PageHit {
   page: number
   matchCount: number
-  snippets: string[]   // one snippet per occurrence (up to 8 per page)
+  snippets: string[]
+  imageOnly: boolean   // true if no text could be extracted from this page
 }
 
 export interface SearchResult {
@@ -21,6 +21,8 @@ export interface SearchResult {
   person: string
   hits: PageHit[]
   totalMatches: number
+  totalPages: number
+  imageOnlyPages: number  // pages we couldn't search (scanned images)
 }
 
 async function findPDFs(dir: string): Promise<string[]> {
@@ -51,8 +53,7 @@ function extractMeta(filePath: string): { year: string; person: string } {
   return { year, person }
 }
 
-// Extract up to maxHits individual context snippets from pageText for a given query
-function getSnippets(pageText: string, query: string, maxHits = 8, contextChars = 180): string[] {
+function getSnippets(pageText: string, query: string, maxHits = 8, contextChars = 200): string[] {
   const clean = pageText.replace(/\s+/g, ' ')
   const lower = clean.toLowerCase()
   const qLower = query.toLowerCase()
@@ -76,6 +77,34 @@ function getSnippets(pageText: string, query: string, maxHits = 8, contextChars 
   return snippets
 }
 
+// Extract text from each page using pdfjs-dist (accurate per-page)
+async function extractPages(buffer: Buffer): Promise<{ pageNum: number; text: string }[]> {
+  // Dynamic import required — pdfjs-dist is ESM-only
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfjsLib: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const data = new Uint8Array(buffer)
+  const doc = await pdfjsLib.getDocument({
+    data,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+    disableWorker: true,
+    verbosity: 0,
+  }).promise
+
+  const pages: { pageNum: number; text: string }[] = []
+
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i)
+    const content = await page.getTextContent()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = content.items.map((item: any) => item.str ?? '').join(' ')
+    pages.push({ pageNum: i, text })
+  }
+
+  return pages
+}
+
 export async function GET(req: NextRequest) {
   const query = (req.nextUrl.searchParams.get('q') || '').trim()
 
@@ -89,15 +118,23 @@ export async function GET(req: NextRequest) {
   for (const pdfPath of pdfs) {
     try {
       const buffer = await readFile(pdfPath)
-      const data = await pdfParse(buffer)
       const { year, person } = extractMeta(pdfPath)
       const relPath = path.relative(STORAGE_ROOT, pdfPath)
 
-      const pages = data.text.split(/\f/)
+      const pages = await extractPages(buffer)
       const hits: PageHit[] = []
+      let imageOnlyPages = 0
 
-      pages.forEach((pageText: string, pageIndex: number) => {
-        const lower = pageText.toLowerCase()
+      for (const { pageNum, text } of pages) {
+        const charCount = text.replace(/\s+/g, '').length
+        const isImageOnly = charCount < 15
+
+        if (isImageOnly) {
+          imageOnlyPages++
+          continue
+        }
+
+        const lower = text.toLowerCase()
         const qLower = query.toLowerCase()
         let pos = 0
         let matchCount = 0
@@ -105,18 +142,30 @@ export async function GET(req: NextRequest) {
           matchCount++
           pos += qLower.length
         }
+
         if (matchCount > 0) {
           hits.push({
-            page: pageIndex + 1,
+            page: pageNum,
             matchCount,
-            snippets: getSnippets(pageText, query),
+            snippets: getSnippets(text, query),
+            imageOnly: false,
           })
         }
-      })
+      }
 
-      if (hits.length > 0) {
+      if (hits.length > 0 || imageOnlyPages > 0) {
         const totalMatches = hits.reduce((s, h) => s + h.matchCount, 0)
-        results.push({ file: relPath, year, person, hits, totalMatches })
+        if (totalMatches > 0) {
+          results.push({
+            file: relPath,
+            year,
+            person,
+            hits,
+            totalMatches,
+            totalPages: pages.length,
+            imageOnlyPages,
+          })
+        }
       }
     } catch (e) {
       console.error(`Failed to parse ${pdfPath}:`, e)

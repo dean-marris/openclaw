@@ -13,6 +13,8 @@ type SearchResult = {
   person: string
   hits: PageHit[]
   totalMatches: number
+  totalPages: number
+  imageOnlyPages: number
 }
 
 type SearchResponse = {
@@ -162,6 +164,9 @@ export function SearchDocs() {
                   <p className="text-sm font-medium text-slate-200 truncate">{fileName}</p>
                   <p className="text-xs text-[#718096]">
                     {result.year} · {result.totalMatches} match{result.totalMatches !== 1 ? 'es' : ''} on {result.hits.length} page{result.hits.length !== 1 ? 's' : ''}
+                    {result.imageOnlyPages > 0 && (
+                      <span className="ml-2 text-amber-400">· ⚠️ {result.imageOnlyPages} scanned page{result.imageOnlyPages !== 1 ? 's' : ''} not searchable</span>
+                    )}
                   </p>
                 </div>
                 <span className="bg-blue-600/20 text-blue-400 text-xs px-2 py-1 rounded-full font-medium flex-shrink-0">
