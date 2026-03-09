@@ -61,21 +61,41 @@ async function convexQuery(fnPath: string, args: Record<string, unknown>) {
 }
 
 // Find or create a person subfolder in Google Drive
+// Maps person name → Drive folder ID under GDRIVE_ROOT
 const driveSubfolderCache: Record<string, string> = {}
+
+// Hardcoded IDs for the known subfolders under marris_openclaw/mission-control/storage/2025-taxes/
+// These were confirmed via gog drive ls on 2026-03-08
+const KNOWN_SUBFOLDER_IDS: Record<string, string> = {
+  dean:     '17X6mq2o8eJUlwazIpzGG2F9j2tRJmwfk',
+  ella:     '1H4vjQTqUaH7Wy3eZ07uZ0Gtln8WyIoqr',
+  joint:    '1RrnkAwY0wqRXp1tXJUW1L5N7LGlFqgLD',
+  virginia: '1Mt76nQc9e71598-wUia7QC-64TK6ZarZ',
+  jack:     '1hnSRf0-SYHOdi1W4JLlgBnjbXyW_VdPj',
+  phoebe:   '1mRtt91HnZyRUEvNafk3m9ebks3_g3G1x',
+}
 
 async function getDriveSubfolder(person: string): Promise<string> {
   if (driveSubfolderCache[person]) return driveSubfolderCache[person]
 
+  // Use known IDs first — fast and reliable
+  if (KNOWN_SUBFOLDER_IDS[person]) {
+    driveSubfolderCache[person] = KNOWN_SUBFOLDER_IDS[person]
+    return KNOWN_SUBFOLDER_IDS[person]
+  }
+
   try {
-    // List existing subfolders matching this person name
+    // gog drive ls --json returns a plain array, not { files: [] }
     const out = execSync(
-      `GOG_KEYRING_PASSWORD="marrisopenclaw" gog drive ls --parent "${GDRIVE_ROOT}" --json --query "name='${person}' and mimeType='application/vnd.google-apps.folder'"`,
+      `GOG_KEYRING_PASSWORD="marrisopenclaw" gog drive ls --parent "${GDRIVE_ROOT}" --json --query "name='${person}'"`,
       { encoding: 'utf-8', timeout: 15000 }
     )
     const parsed = JSON.parse(out)
-    if (parsed.files?.length > 0) {
-      driveSubfolderCache[person] = parsed.files[0].id
-      return parsed.files[0].id
+    // Handle both array and { files: [] } shapes
+    const items: { id: string }[] = Array.isArray(parsed) ? parsed : (parsed.files ?? [])
+    if (items.length > 0) {
+      driveSubfolderCache[person] = items[0].id
+      return items[0].id
     }
 
     // Create subfolder
