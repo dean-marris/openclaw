@@ -2,7 +2,10 @@
 .openclaw/
 
 # Mission-control: dependencies and generated
+# node_modules may be symlinked outside Drive — ignore both dir and symlink forms
+mission-control/node_modules
 mission-control/node_modules/
+mission-control/dashboard/node_modules
 mission-control/dashboard/node_modules/
 mission-control/convex/_generated/
 mission-control/scripts/.venv/
